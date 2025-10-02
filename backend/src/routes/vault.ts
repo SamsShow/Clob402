@@ -192,3 +192,131 @@ vaultRouter.get('/calculate-value/:shares', async (req: Request, res: Response) 
   }
 });
 
+/**
+ * Get user's available balance (for trading)
+ */
+vaultRouter.get('/balance/available/:address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+
+    const balance = await aptosClient.view({
+      payload: {
+        function: `${MODULE_ADDRESS}::strategy_vault::get_user_available_balance`,
+        functionArguments: [VAULT_ADDRESS, address],
+      },
+    });
+
+    res.json({
+      success: true,
+      userAddress: address,
+      availableBalance: balance[0],
+    });
+  } catch (error: any) {
+    logger.error('Error getting available balance:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve available balance',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Get user's locked balance (in open orders)
+ */
+vaultRouter.get('/balance/locked/:address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+
+    const balance = await aptosClient.view({
+      payload: {
+        function: `${MODULE_ADDRESS}::strategy_vault::get_user_locked_balance`,
+        functionArguments: [VAULT_ADDRESS, address],
+      },
+    });
+
+    res.json({
+      success: true,
+      userAddress: address,
+      lockedBalance: balance[0],
+    });
+  } catch (error: any) {
+    logger.error('Error getting locked balance:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve locked balance',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Get user's total balance (available + locked)
+ */
+vaultRouter.get('/balance/total/:address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+
+    const balance = await aptosClient.view({
+      payload: {
+        function: `${MODULE_ADDRESS}::strategy_vault::get_user_total_balance`,
+        functionArguments: [VAULT_ADDRESS, address],
+      },
+    });
+
+    res.json({
+      success: true,
+      userAddress: address,
+      totalBalance: balance[0],
+    });
+  } catch (error: any) {
+    logger.error('Error getting total balance:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve total balance',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Get all user balances (available, locked, total) in one call
+ */
+vaultRouter.get('/balance/:address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+
+    const [available, locked, total] = await Promise.all([
+      aptosClient.view({
+        payload: {
+          function: `${MODULE_ADDRESS}::strategy_vault::get_user_available_balance`,
+          functionArguments: [VAULT_ADDRESS, address],
+        },
+      }),
+      aptosClient.view({
+        payload: {
+          function: `${MODULE_ADDRESS}::strategy_vault::get_user_locked_balance`,
+          functionArguments: [VAULT_ADDRESS, address],
+        },
+      }),
+      aptosClient.view({
+        payload: {
+          function: `${MODULE_ADDRESS}::strategy_vault::get_user_total_balance`,
+          functionArguments: [VAULT_ADDRESS, address],
+        },
+      }),
+    ]);
+
+    res.json({
+      success: true,
+      userAddress: address,
+      availableBalance: available[0],
+      lockedBalance: locked[0],
+      totalBalance: total[0],
+    });
+  } catch (error: any) {
+    logger.error('Error getting balances:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve balances',
+      message: error.message,
+    });
+  }
+});
+
