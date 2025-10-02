@@ -1,6 +1,7 @@
 module clob_strategy_vault::payment_with_auth {
     use std::signer;
     use std::vector;
+    use std::bcs;
     use aptos_framework::coin::{Self, Coin};
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::timestamp;
@@ -58,15 +59,7 @@ module clob_strategy_vault::payment_with_auth {
         assert!(current_time <= expiry, E_AUTHORIZATION_EXPIRED);
 
         // Check if nonce store exists for sender
-        if (!exists<NonceStore>(sender)) {
-            // Initialize if it doesn't exist
-            let sender_signer = account::create_signer_with_capability(
-                &account::create_test_signer_cap(sender)
-            );
-            move_to(&sender_signer, NonceStore {
-                used_nonces: table::new(),
-            });
-        };
+        assert!(exists<NonceStore>(sender), E_NONCE_STORE_NOT_INITIALIZED);
 
         // Check nonce replay
         let nonce_store = borrow_global_mut<NonceStore>(sender);
