@@ -6,6 +6,7 @@ import { OrderBook } from "@/components/order-book";
 import { OrderForm } from "@/components/order-form";
 import { VaultDashboard } from "@/components/vault-dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TrendingUp, Vault } from "lucide-react";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("trade");
@@ -13,23 +14,36 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-background">
       <Navbar />
-      
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Aptos CLOB Exchange</h1>
-          <p className="text-muted-foreground">
-            Gasless trading powered by x402 payment authorization
+
+      <div className="container mx-auto px-6 py-6">
+        <div className="mb-6">
+          <div className="flex items-baseline gap-3 mb-1.5">
+            <h1 className="text-3xl font-bold tracking-tight">APT/USDC</h1>
+            <span className="text-sm text-muted-foreground">Market</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Gasless limit orders • Automated copy-trading vaults
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="trade">Trade</TabsTrigger>
-            <TabsTrigger value="vault">Strategy Vault</TabsTrigger>
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-5"
+        >
+          <TabsList className="grid w-full max-w-[340px] grid-cols-2 h-9">
+            <TabsTrigger value="trade" className="text-sm">
+              <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
+              Trading
+            </TabsTrigger>
+            <TabsTrigger value="vault" className="text-sm">
+              <Vault className="w-3.5 h-3.5 mr-1.5" />
+              Vaults
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="trade" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <TabsContent value="trade" className="space-y-5 mt-5">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               <div className="lg:col-span-2">
                 <OrderBook />
               </div>
@@ -39,7 +53,7 @@ export default function Home() {
             </div>
           </TabsContent>
 
-          <TabsContent value="vault">
+          <TabsContent value="vault" className="mt-5">
             <VaultDashboard />
           </TabsContent>
         </Tabs>
@@ -47,4 +61,3 @@ export default function Home() {
     </main>
   );
 }
-

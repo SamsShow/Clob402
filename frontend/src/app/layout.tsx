@@ -7,8 +7,8 @@ import { WalletProvider } from "@/components/wallet-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Aptos CLOB - x402 Strategy Vault",
-  description: "Gasless CLOB trading with copy-trading vaults on Aptos",
+  title: "Clob402 - x402 Protocol",
+  description: "Gasless limit orders and copy-trading vaults on Aptos",
 };
 
 export default function RootLayout({
@@ -25,12 +25,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <WalletProvider>
-            {children}
-          </WalletProvider>
+          <WalletProvider>{children}</WalletProvider>
         </ThemeProvider>
       </body>
     </html>
   );
 }
-

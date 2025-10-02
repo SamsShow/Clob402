@@ -4,51 +4,63 @@ import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Wallet, LogOut } from "lucide-react";
+import Image from "next/image";
 
 export function Navbar() {
   const { connect, disconnect, account, connected } = useWallet();
 
   const handleConnect = async () => {
     try {
-      // This will trigger wallet selection modal
-      await connect("Petra" as any); // or detect available wallets
+      await connect("Petra" as any);
     } catch (error) {
       console.error("Failed to connect wallet:", error);
     }
   };
 
   return (
-    <nav className="border-b">
-      <div className="container mx-auto px-4 py-4">
+    <nav className="border-b backdrop-blur-sm bg-background/95">
+      <div className="container mx-auto px-6 py-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold">C</span>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 relative">
+              <Image
+                src="/Group.svg"
+                alt="Clob402"
+                width={32}
+                height={32}
+                className="opacity-90 dark:opacity-100 [filter:brightness(0)] dark:[filter:brightness(1)_invert(1)]"
+              />
             </div>
-            <span className="text-xl font-bold">Aptos CLOB</span>
+            <div className="flex flex-col -space-y-1">
+              <span className="text-xl font-bold tracking-tight">Clob402</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                x402 Protocol
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <ModeToggle />
-            
+
             {connected && account ? (
               <div className="flex items-center gap-2">
-                <div className="px-3 py-2 rounded-lg bg-muted text-sm">
+                <div className="px-3 py-1.5 rounded-md bg-muted/60 text-xs font-mono border">
                   {account.address.slice(0, 6)}...{account.address.slice(-4)}
                 </div>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={disconnect}
+                  className="text-xs"
                 >
-                  <LogOut className="w-4 h-4 mr-2" />
+                  <LogOut className="w-3.5 h-3.5 mr-1.5" />
                   Disconnect
                 </Button>
               </div>
             ) : (
-              <Button onClick={handleConnect}>
+              <Button onClick={handleConnect} size="sm">
                 <Wallet className="w-4 h-4 mr-2" />
-                Connect Wallet
+                Connect
               </Button>
             )}
           </div>
@@ -57,4 +69,3 @@ export function Navbar() {
     </nav>
   );
 }
-

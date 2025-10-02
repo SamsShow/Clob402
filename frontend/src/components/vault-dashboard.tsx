@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,24 +34,27 @@ export function VaultDashboard() {
 
   const fetchVaultData = async () => {
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
-      
+      const backendUrl =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+
       // Fetch vault info
       const vaultResponse = await fetch(`${backendUrl}/api/vault/info`);
       if (vaultResponse.ok) {
         const data = await vaultResponse.json();
         setVaultInfo({
-          totalDeposits: data.totalDeposits || 0,
-          totalShares: data.totalShares || 0,
+          totalDeposits: Number(data.totalDeposits) || 0,
+          totalShares: Number(data.totalShares) || 0,
           referenceTrader: data.referenceTrader || "",
         });
       }
 
       // Fetch user shares
-      const sharesResponse = await fetch(`${backendUrl}/api/vault/shares/${account?.address}`);
+      const sharesResponse = await fetch(
+        `${backendUrl}/api/vault/shares/${account?.address}`
+      );
       if (sharesResponse.ok) {
         const data = await sharesResponse.json();
-        setUserShares(data.shares || 0);
+        setUserShares(Number(data.shares) || 0);
       }
     } catch (error) {
       console.error("Error fetching vault data:", error);
@@ -54,10 +63,11 @@ export function VaultDashboard() {
 
   const handleDeposit = async () => {
     if (!depositAmount || parseFloat(depositAmount) <= 0) return;
-    
+
     setLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+      const backendUrl =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
       const response = await fetch(`${backendUrl}/api/vault/deposit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -80,10 +90,11 @@ export function VaultDashboard() {
 
   const handleWithdraw = async () => {
     if (!withdrawShares || parseFloat(withdrawShares) <= 0) return;
-    
+
     setLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+      const backendUrl =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
       const response = await fetch(`${backendUrl}/api/vault/withdraw`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,101 +115,137 @@ export function VaultDashboard() {
     }
   };
 
-  const shareValue = vaultInfo.totalShares > 0 
-    ? vaultInfo.totalDeposits / vaultInfo.totalShares 
-    : 1;
+  const shareValue =
+    vaultInfo.totalShares > 0
+      ? vaultInfo.totalDeposits / vaultInfo.totalShares
+      : 1;
 
-  const userValue = userShares * shareValue;
+  const userValue = Number(userShares) * shareValue;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       {/* Vault Stats */}
       <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Value Locked</CardTitle>
-            <WalletIcon className="h-4 w-4 text-muted-foreground" />
+        <Card className="border-muted/40">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              TVL
+            </CardTitle>
+            <WalletIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${vaultInfo.totalDeposits.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Across {vaultInfo.totalShares.toLocaleString()} shares
+            <div className="text-2xl font-bold font-mono">
+              ${vaultInfo.totalDeposits.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {vaultInfo.totalShares.toLocaleString()} shares issued
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Your Position</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card className="border-muted/40">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Your Position
+            </CardTitle>
+            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userShares.toLocaleString()} shares</div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <div className="text-2xl font-bold font-mono">
+              {Number(userShares).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
               ≈ ${userValue.toFixed(2)} USDC
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Share Price</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+        <Card className="border-muted/40">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Share Price
+            </CardTitle>
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${shareValue.toFixed(4)}</div>
-            <p className="text-xs text-green-500 mt-1">
-              +0.00% (24h)
+            <div className="text-2xl font-bold font-mono">
+              ${shareValue.toFixed(4)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Last 24h: <span className="text-green-500">+0.00%</span>
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Deposit Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Deposit</CardTitle>
-          <CardDescription>Add funds to the strategy vault</CardDescription>
+      <Card className="border-muted/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Deposit</CardTitle>
+          <CardDescription className="text-xs">
+            Add USDC to earn from copy-trading
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="deposit-amount">Amount (USDC)</Label>
-            <Input
-              id="deposit-amount"
-              type="number"
-              placeholder="0.00"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              step="0.01"
-            />
-          </div>
-          <div className="p-3 bg-muted rounded-lg text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">You will receive:</span>
-              <span className="font-semibold">
-                {depositAmount ? (parseFloat(depositAmount) / shareValue).toFixed(2) : "0.00"} shares
+        <CardContent className="space-y-3.5">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="deposit-amount"
+              className="text-xs text-muted-foreground uppercase tracking-wider"
+            >
+              Amount
+            </Label>
+            <div className="relative">
+              <Input
+                id="deposit-amount"
+                type="number"
+                placeholder="1000"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                step="0.01"
+                className="font-mono pr-14"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                USDC
               </span>
             </div>
           </div>
-          <Button 
-            className="w-full" 
+          <div className="p-2.5 bg-muted/50 rounded border">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">You'll receive</span>
+              <span className="font-mono font-medium">
+                {depositAmount
+                  ? (parseFloat(depositAmount) / shareValue).toFixed(2)
+                  : "0.00"}{" "}
+                shares
+              </span>
+            </div>
+          </div>
+          <Button
+            className="w-full text-sm h-9"
             onClick={handleDeposit}
             disabled={loading || !connected || !depositAmount}
           >
-            {loading ? "Processing..." : "Deposit"}
+            {loading ? "Depositing..." : "Deposit USDC"}
           </Button>
         </CardContent>
       </Card>
 
       {/* Withdraw Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Withdraw</CardTitle>
-          <CardDescription>Redeem your vault shares</CardDescription>
+      <Card className="border-muted/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Withdraw</CardTitle>
+          <CardDescription className="text-xs">
+            Redeem shares for USDC
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="withdraw-shares">Shares</Label>
+        <CardContent className="space-y-3.5">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="withdraw-shares"
+              className="text-xs text-muted-foreground uppercase tracking-wider"
+            >
+              Shares to Redeem
+            </Label>
             <Input
               id="withdraw-shares"
               type="number"
@@ -206,61 +253,78 @@ export function VaultDashboard() {
               value={withdrawShares}
               onChange={(e) => setWithdrawShares(e.target.value)}
               step="0.01"
+              className="font-mono"
             />
-            <div className="text-xs text-muted-foreground">
-              Available: {userShares.toFixed(2)} shares
+            <div className="text-[10px] text-muted-foreground">
+              You own {Number(userShares).toFixed(2)} shares
             </div>
           </div>
-          <div className="p-3 bg-muted rounded-lg text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">You will receive:</span>
-              <span className="font-semibold">
-                {withdrawShares ? (parseFloat(withdrawShares) * shareValue).toFixed(2) : "0.00"} USDC
+          <div className="p-2.5 bg-muted/50 rounded border">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">You'll receive</span>
+              <span className="font-mono font-medium">
+                {withdrawShares
+                  ? (parseFloat(withdrawShares) * shareValue).toFixed(2)
+                  : "0.00"}{" "}
+                <span className="text-muted-foreground">USDC</span>
               </span>
             </div>
           </div>
-          <Button 
-            variant="outline" 
-            className="w-full"
+          <Button
+            variant="outline"
+            className="w-full text-sm h-9"
             onClick={handleWithdraw}
             disabled={loading || !connected || !withdrawShares}
           >
-            {loading ? "Processing..." : "Withdraw"}
+            {loading ? "Withdrawing..." : "Withdraw"}
           </Button>
         </CardContent>
       </Card>
 
       {/* Strategy Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Strategy Info</CardTitle>
-          <CardDescription>Copy-trading vault details</CardDescription>
+      <Card className="border-muted/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Strategy</CardTitle>
+          <CardDescription className="text-xs">
+            Vault configuration
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3.5">
           <div className="space-y-3">
             <div>
-              <div className="text-sm text-muted-foreground">Reference Trader</div>
-              <div className="text-sm font-mono mt-1">
-                {vaultInfo.referenceTrader 
-                  ? `${vaultInfo.referenceTrader.slice(0, 8)}...${vaultInfo.referenceTrader.slice(-6)}`
-                  : "Not set"}
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                Reference Trader
+              </div>
+              <div className="text-xs font-mono bg-muted/50 p-2 rounded border">
+                {vaultInfo.referenceTrader
+                  ? `${vaultInfo.referenceTrader.slice(
+                      0,
+                      8
+                    )}...${vaultInfo.referenceTrader.slice(-6)}`
+                  : "Not configured"}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                  Strategy
+                </div>
+                <div className="text-xs font-medium">Copy Trading</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                  Performance Fee
+                </div>
+                <div className="text-xs font-medium">10%</div>
               </div>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">Strategy Type</div>
-              <div className="text-sm font-medium mt-1">Copy Trading</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Performance Fee</div>
-              <div className="text-sm font-medium mt-1">10% on profits</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Status</div>
-              <div className="text-sm font-medium mt-1">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  Active
-                </span>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+                Status
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-green-500/10 rounded text-xs font-medium text-green-600 dark:text-green-400">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                Active
               </div>
             </div>
           </div>
@@ -268,10 +332,10 @@ export function VaultDashboard() {
       </Card>
 
       {!connected && (
-        <Card className="lg:col-span-3">
-          <CardContent className="py-8">
-            <div className="text-center text-muted-foreground">
-              Connect your wallet to view and manage your vault position
+        <Card className="lg:col-span-3 border-muted/40">
+          <CardContent className="py-6">
+            <div className="text-center text-sm text-muted-foreground">
+              Connect wallet to manage vault positions
             </div>
           </CardContent>
         </Card>
@@ -279,4 +343,3 @@ export function VaultDashboard() {
     </div>
   );
 }
-
