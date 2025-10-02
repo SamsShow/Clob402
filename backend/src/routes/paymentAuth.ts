@@ -16,58 +16,6 @@ import { logger } from "../utils/logger";
 export const paymentAuthRouter = Router();
 
 /**
- * Initialize nonce store for a user
- */
-paymentAuthRouter.post("/initialize-nonce-store", async (req: Request, res: Response) => {
-  try {
-    const { userAddress } = req.body;
-
-    if (!userAddress) {
-      return res.status(400).json({
-        error: "Missing required field: userAddress",
-      });
-    }
-
-    // Submit transaction to initialize nonce store
-    const { aptosClient, facilitatorAccount, MODULE_ADDRESS } = require("../services/aptosService");
-    
-    const transaction = await aptosClient.transaction.build.simple({
-      sender: facilitatorAccount.accountAddress,
-      data: {
-        function: `${MODULE_ADDRESS}::payment_with_auth::initialize_nonce_store`,
-        functionArguments: [userAddress],
-      },
-    });
-
-    const pendingTxn = await aptosClient.signAndSubmitTransaction({
-      signer: facilitatorAccount,
-      transaction,
-    });
-
-    await aptosClient.waitForTransaction({
-      transactionHash: pendingTxn.hash,
-    });
-
-    logger.info("Nonce store initialized", {
-      hash: pendingTxn.hash,
-      userAddress,
-    });
-
-    res.json({
-      success: true,
-      transactionHash: pendingTxn.hash,
-      message: "Nonce store initialized successfully",
-    });
-  } catch (error: any) {
-    logger.error("Error initializing nonce store:", error);
-    res.status(500).json({
-      error: "Failed to initialize nonce store",
-      message: error.message,
-    });
-  }
-});
-
-/**
  * Request payment authorization intent (HTTP 402)
  * Returns payment details for user to sign
  */

@@ -64,7 +64,8 @@ function constructBCSAuthMessage(
 }
 
 export function OrderForm() {
-  const { account, connected, signMessage, signAndSubmitTransaction } = useWallet();
+  const { account, connected, signMessage, signAndSubmitTransaction } =
+    useWallet();
   const { toast } = useToast();
 
   const [buyPrice, setBuyPrice] = useState("");
@@ -78,40 +79,46 @@ export function OrderForm() {
   useEffect(() => {
     const checkNonceStore = async () => {
       if (!connected || !account) return;
-      
+
       try {
         const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
-        const response = await fetch(`https://api.testnet.aptoslabs.com/v1/accounts/${account.address}/resource/0x${moduleAddress?.replace('0x', '')}::payment_with_auth::NonceStore`);
+        const response = await fetch(
+          `https://api.testnet.aptoslabs.com/v1/accounts/${
+            account.address
+          }/resource/0x${moduleAddress?.replace(
+            "0x",
+            ""
+          )}::payment_with_auth::NonceStore`
+        );
         setNonceStoreInitialized(response.ok);
       } catch {
         setNonceStoreInitialized(false);
       }
     };
-    
+
     checkNonceStore();
   }, [connected, account]);
 
   const initializeNonceStore = async () => {
     if (!connected) return;
-    
+
     setLoading(true);
     try {
       const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
-      
-      const transaction = {
+
+      const response = await signAndSubmitTransaction({
+        sender: account.address,
         data: {
           function: `${moduleAddress}::payment_with_auth::initialize_nonce_store`,
           functionArguments: [],
         },
-      };
+      });
 
-      const response = await signAndSubmitTransaction(transaction);
-      
       toast({
         title: "Initialization successful!",
         description: "Your account is now ready to place orders",
       });
-      
+
       setNonceStoreInitialized(true);
     } catch (error: any) {
       console.error("Error initializing nonce store:", error);
@@ -224,8 +231,8 @@ export function OrderForm() {
           typeof (sig as any).toBytes === "function"
         ) {
           const bytes = (sig as any).toBytes();
-          signatureHex = Array.from(bytes)
-            .map((b: number) => b.toString(16).padStart(2, "0"))
+          signatureHex = Array.from(bytes as Uint8Array)
+            .map((b) => b.toString(16).padStart(2, "0"))
             .join("");
         } else if (sig instanceof Uint8Array) {
           signatureHex = Array.from(sig)
@@ -346,6 +353,26 @@ export function OrderForm() {
         <CardTitle className="text-lg">New Order</CardTitle>
       </CardHeader>
       <CardContent>
+        {connected && !nonceStoreInitialized && (
+          <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2 text-sm">
+              Account Setup Required
+            </h3>
+            <p className="text-xs text-yellow-800 dark:text-yellow-200 mb-3">
+              Initialize your account for payment authorization (one-time
+              setup).
+            </p>
+            <Button
+              onClick={initializeNonceStore}
+              disabled={loading}
+              size="sm"
+              className="w-full"
+            >
+              {loading ? "Initializing..." : "Initialize Account"}
+            </Button>
+          </div>
+        )}
+
         <Tabs defaultValue="buy" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="buy" className="text-sm">

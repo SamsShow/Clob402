@@ -91,6 +91,7 @@ module clob_strategy_vault::payment_with_auth {
     }
 
     /// Construct authorization message for signing
+    /// This matches the format that Aptos wallets use for signMessage
     fun construct_authorization_message(
         sender: address,
         recipient: address,
@@ -100,17 +101,64 @@ module clob_strategy_vault::payment_with_auth {
     ): vector<u8> {
         let message = vector::empty<u8>();
         
-        // Domain separator
-        vector::append(&mut message, b"APTOS_PAYMENT_AUTH");
+        // First, construct the BCS message part
+        let bcs_message = vector::empty<u8>();
+        vector::append(&mut bcs_message, b"APTOS_PAYMENT_AUTH");
+        vector::append(&mut bcs_message, bcs::to_bytes(&sender));
+        vector::append(&mut bcs_message, bcs::to_bytes(&recipient));
+        vector::append(&mut bcs_message, bcs::to_bytes(&amount));
+        vector::append(&mut bcs_message, bcs::to_bytes(&nonce));
+        vector::append(&mut bcs_message, bcs::to_bytes(&expiry));
         
-        // Serialize parameters
-        vector::append(&mut message, bcs::to_bytes(&sender));
-        vector::append(&mut message, bcs::to_bytes(&recipient));
-        vector::append(&mut message, bcs::to_bytes(&amount));
-        vector::append(&mut message, bcs::to_bytes(&nonce));
-        vector::append(&mut message, bcs::to_bytes(&expiry));
+        // Convert BCS message to hex string (as the wallet does)
+        let hex_message = to_hex_string(&bcs_message);
+        
+        // Wallet wraps with: "APTOS\nmessage: {hex}\nnonce: {nonce_string}"
+        vector::append(&mut message, b"APTOS\nmessage: ");
+        vector::append(&mut message, hex_message);
+        vector::append(&mut message, b"\nnonce: ");
+        vector::append(&mut message, to_string_u64(nonce));
         
         message
+    }
+    
+    /// Convert bytes to hex string
+    fun to_hex_string(bytes: &vector<u8>): vector<u8> {
+        let hex_chars = b"0123456789abcdef";
+        let result = vector::empty<u8>();
+        let len = vector::length(bytes);
+        let i = 0;
+        
+        while (i < len) {
+            let byte = *vector::borrow(bytes, i);
+            let high = byte / 16;
+            let low = byte % 16;
+            vector::push_back(&mut result, *vector::borrow(&hex_chars, (high as u64)));
+            vector::push_back(&mut result, *vector::borrow(&hex_chars, (low as u64)));
+            i = i + 1;
+        };
+        
+        result
+    }
+    
+    /// Convert u64 to string
+    fun to_string_u64(value: u64): vector<u8> {
+        if (value == 0) {
+            return b"0"
+        };
+        
+        let result = vector::empty<u8>();
+        let temp = value;
+        
+        while (temp > 0) {
+            let digit = ((temp % 10) as u8);
+            vector::push_back(&mut result, digit + 48); // 48 is ASCII '0'
+            temp = temp / 10;
+        };
+        
+        // Reverse the result
+        vector::reverse(&mut result);
+        result
     }
 
     /// Check if a nonce has been used
