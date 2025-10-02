@@ -1,13 +1,13 @@
 [package]
 name = "clob_strategy_vault"
 version = "1.0.0"
-authors = ["0x4d7a87c0032df24b6bb29424d1ab3e7dffa5ca6801382523883f38485c32555f"]
+authors = ["0xa4d7e1f47887dc6b84743297164fdd63deaa872329f8617be1d4c87375d39323"]
 
 [addresses]
-clob_strategy_vault = "_"
+clob_strategy_vault = "0xa4d7e1f47887dc6b84743297164fdd63deaa872329f8617be1d4c87375d39323"
 
 [dev-addresses]
-clob_strategy_vault = "0x4d7a87c0032df24b6bb29424d1ab3e7dffa5ca6801382523883f38485c32555f"
+clob_strategy_vault = "0xa4d7e1f47887dc6b84743297164fdd63deaa872329f8617be1d4c87375d39323"
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"

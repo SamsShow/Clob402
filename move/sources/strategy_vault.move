@@ -11,13 +11,18 @@ module clob_strategy_vault::strategy_vault {
     const E_INVALID_AMOUNT: u64 = 3;
     const E_INSUFFICIENT_SHARES: u64 = 4;
     const E_UNAUTHORIZED: u64 = 5;
+    const E_INSUFFICIENT_AVAILABLE_BALANCE: u64 = 6;
+    const E_INSUFFICIENT_LOCKED_BALANCE: u64 = 7;
 
     /// Vault that tracks deposits and shares for copy-trading
+    /// Also serves as escrow for order book trading
     struct Vault has key {
         reference_trader: address,
         total_deposits: u64,
         total_shares: u64,
         user_shares: Table<address, u64>,
+        user_available_balance: Table<address, u64>,  // Available for trading
+        user_locked_balance: Table<address, u64>,     // Locked in open orders
         is_active: bool,
     }
 
@@ -57,6 +62,8 @@ module clob_strategy_vault::strategy_vault {
                 total_deposits: 0,
                 total_shares: 0,
                 user_shares: table::new(),
+                user_available_balance: table::new(),
+                user_locked_balance: table::new(),
                 is_active: true,
             });
         };
@@ -94,6 +101,16 @@ module clob_strategy_vault::strategy_vault {
         };
         let user_shares = table::borrow_mut(&mut vault.user_shares, user_addr);
         *user_shares = *user_shares + shares_to_mint;
+
+        // Initialize and update user available balance for trading
+        if (!table::contains(&vault.user_available_balance, user_addr)) {
+            table::add(&mut vault.user_available_balance, user_addr, 0);
+        };
+        if (!table::contains(&vault.user_locked_balance, user_addr)) {
+            table::add(&mut vault.user_locked_balance, user_addr, 0);
+        };
+        let available_balance = table::borrow_mut(&mut vault.user_available_balance, user_addr);
+        *available_balance = *available_balance + amount;
 
         // Transfer coins to vault
         coin::transfer<CoinType>(user, vault_addr, amount);
@@ -158,6 +175,82 @@ module clob_strategy_vault::strategy_vault {
         });
     }
 
+    /// Lock user balance for an open order
+    /// Called by order book when user places an order
+    public fun lock_balance(
+        vault_addr: address,
+        user: address,
+        amount: u64
+    ) acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        let vault = borrow_global_mut<Vault>(vault_addr);
+
+        // Ensure user has balances initialized
+        if (!table::contains(&vault.user_available_balance, user)) {
+            table::add(&mut vault.user_available_balance, user, 0);
+        };
+        if (!table::contains(&vault.user_locked_balance, user)) {
+            table::add(&mut vault.user_locked_balance, user, 0);
+        };
+
+        let available = table::borrow_mut(&mut vault.user_available_balance, user);
+        let locked = table::borrow_mut(&mut vault.user_locked_balance, user);
+
+        assert!(*available >= amount, E_INSUFFICIENT_AVAILABLE_BALANCE);
+
+        // Move from available to locked
+        *available = *available - amount;
+        *locked = *locked + amount;
+    }
+
+    /// Unlock user balance when order is cancelled
+    public fun unlock_balance(
+        vault_addr: address,
+        user: address,
+        amount: u64
+    ) acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        let vault = borrow_global_mut<Vault>(vault_addr);
+
+        let available = table::borrow_mut(&mut vault.user_available_balance, user);
+        let locked = table::borrow_mut(&mut vault.user_locked_balance, user);
+
+        assert!(*locked >= amount, E_INSUFFICIENT_LOCKED_BALANCE);
+
+        // Move from locked back to available
+        *locked = *locked - amount;
+        *available = *available + amount;
+    }
+
+    /// Settle order by transferring locked balance between users
+    /// Called when an order is filled
+    public fun settle_order(
+        vault_addr: address,
+        from: address,
+        to: address,
+        amount: u64
+    ) acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        let vault = borrow_global_mut<Vault>(vault_addr);
+
+        // Ensure 'to' user has balances initialized
+        if (!table::contains(&vault.user_available_balance, to)) {
+            table::add(&mut vault.user_available_balance, to, 0);
+        };
+        if (!table::contains(&vault.user_locked_balance, to)) {
+            table::add(&mut vault.user_locked_balance, to, 0);
+        };
+
+        let from_locked = table::borrow_mut(&mut vault.user_locked_balance, from);
+        let to_available = table::borrow_mut(&mut vault.user_available_balance, to);
+
+        assert!(*from_locked >= amount, E_INSUFFICIENT_LOCKED_BALANCE);
+
+        // Transfer from locked (from) to available (to)
+        *from_locked = *from_locked - amount;
+        *to_available = *to_available + amount;
+    }
+
     /// View functions
     #[view]
     public fun get_user_shares(vault_addr: address, user: address): u64 acquires Vault {
@@ -186,6 +279,45 @@ module clob_strategy_vault::strategy_vault {
         } else {
             (shares * vault.total_deposits) / vault.total_shares
         }
+    }
+
+    #[view]
+    public fun get_user_available_balance(vault_addr: address, user: address): u64 acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        let vault = borrow_global<Vault>(vault_addr);
+        if (table::contains(&vault.user_available_balance, user)) {
+            *table::borrow(&vault.user_available_balance, user)
+        } else {
+            0
+        }
+    }
+
+    #[view]
+    public fun get_user_locked_balance(vault_addr: address, user: address): u64 acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        let vault = borrow_global<Vault>(vault_addr);
+        if (table::contains(&vault.user_locked_balance, user)) {
+            *table::borrow(&vault.user_locked_balance, user)
+        } else {
+            0
+        }
+    }
+
+    #[view]
+    public fun get_user_total_balance(vault_addr: address, user: address): u64 acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        let vault = borrow_global<Vault>(vault_addr);
+        let available = if (table::contains(&vault.user_available_balance, user)) {
+            *table::borrow(&vault.user_available_balance, user)
+        } else {
+            0
+        };
+        let locked = if (table::contains(&vault.user_locked_balance, user)) {
+            *table::borrow(&vault.user_locked_balance, user)
+        } else {
+            0
+        };
+        available + locked
     }
 }
 

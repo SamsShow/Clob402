@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { AccountAddress } from "@aptos-labs/ts-sdk";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,62 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
-// Helper function to construct BCS authorization message matching Move contract
-function constructBCSAuthMessage(
-  sender: string,
-  recipient: string,
-  amount: number,
-  nonce: number,
-  expiry: number
-): Uint8Array {
-  const encoder = new TextEncoder();
-
-  // Domain separator
-  const domainSeparator = encoder.encode("APTOS_PAYMENT_AUTH");
-
-  // Serialize parameters using BCS format (little-endian for numbers)
-  const senderBytes = AccountAddress.from(sender).toUint8Array();
-  const recipientBytes = AccountAddress.from(recipient).toUint8Array();
-
-  const amountBytes = new Uint8Array(8);
-  new DataView(amountBytes.buffer).setBigUint64(0, BigInt(amount), true);
-
-  const nonceBytes = new Uint8Array(8);
-  new DataView(nonceBytes.buffer).setBigUint64(0, BigInt(nonce), true);
-
-  const expiryBytes = new Uint8Array(8);
-  new DataView(expiryBytes.buffer).setBigUint64(0, BigInt(expiry), true);
-
-  // Concatenate all parts
-  const totalLength =
-    domainSeparator.length +
-    senderBytes.length +
-    recipientBytes.length +
-    amountBytes.length +
-    nonceBytes.length +
-    expiryBytes.length;
-
-  const fullMessage = new Uint8Array(totalLength);
-  let offset = 0;
-
-  fullMessage.set(domainSeparator, offset);
-  offset += domainSeparator.length;
-  fullMessage.set(senderBytes, offset);
-  offset += senderBytes.length;
-  fullMessage.set(recipientBytes, offset);
-  offset += recipientBytes.length;
-  fullMessage.set(amountBytes, offset);
-  offset += amountBytes.length;
-  fullMessage.set(nonceBytes, offset);
-  offset += nonceBytes.length;
-  fullMessage.set(expiryBytes, offset);
-
-  return fullMessage;
-}
-
 export function OrderForm() {
-  const { account, connected, signMessage, signAndSubmitTransaction } =
-    useWallet();
+  const { account, connected, signAndSubmitTransaction } = useWallet();
   const { toast } = useToast();
 
   const [buyPrice, setBuyPrice] = useState("");
@@ -73,64 +18,71 @@ export function OrderForm() {
   const [sellPrice, setSellPrice] = useState("");
   const [sellQuantity, setSellQuantity] = useState("");
   const [loading, setLoading] = useState(false);
-  const [nonceStoreInitialized, setNonceStoreInitialized] = useState(false);
+  const [vaultBalance, setVaultBalance] = useState({
+    available: 0,
+    locked: 0,
+    total: 0,
+  });
 
-  // Check if nonce store is initialized
+  // Fetch vault balance
   useEffect(() => {
-    const checkNonceStore = async () => {
+    const fetchVaultBalance = async () => {
       if (!connected || !account) return;
 
       try {
-        const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+        const vaultAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+
         const response = await fetch(
-          `https://api.testnet.aptoslabs.com/v1/accounts/${
-            account.address
-          }/resource/0x${moduleAddress?.replace(
-            "0x",
-            ""
-          )}::payment_with_auth::NonceStore`
+          `https://api.testnet.aptoslabs.com/v1/view`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              function: `${vaultAddress}::strategy_vault::get_user_available_balance`,
+              type_arguments: [],
+              arguments: [vaultAddress, account.address],
+            }),
+          }
         );
-        setNonceStoreInitialized(response.ok);
-      } catch {
-        setNonceStoreInitialized(false);
+
+        if (response.ok) {
+          const data = await response.json();
+          const available = Number(data[0] || 0);
+
+          const lockedResponse = await fetch(
+            `https://api.testnet.aptoslabs.com/v1/view`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                function: `${vaultAddress}::strategy_vault::get_user_locked_balance`,
+                type_arguments: [],
+                arguments: [vaultAddress, account.address],
+              }),
+            }
+          );
+
+          const lockedData = await lockedResponse.json();
+          const locked = Number(lockedData[0] || 0);
+
+          setVaultBalance({
+            available,
+            locked,
+            total: available + locked,
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching vault balance:", error);
       }
     };
 
-    checkNonceStore();
+    fetchVaultBalance();
+    const interval = setInterval(fetchVaultBalance, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
   }, [connected, account]);
-
-  const initializeNonceStore = async () => {
-    if (!connected) return;
-
-    setLoading(true);
-    try {
-      const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
-
-      const response = await signAndSubmitTransaction({
-        sender: account.address,
-        data: {
-          function: `${moduleAddress}::payment_with_auth::initialize_nonce_store`,
-          functionArguments: [],
-        },
-      });
-
-      toast({
-        title: "Initialization successful!",
-        description: "Your account is now ready to place orders",
-      });
-
-      setNonceStoreInitialized(true);
-    } catch (error: any) {
-      console.error("Error initializing nonce store:", error);
-      toast({
-        title: "Initialization failed",
-        description: error.message || "Failed to initialize account",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePlaceOrder = async (side: "buy" | "sell") => {
     if (!connected) {
@@ -154,173 +106,36 @@ export function OrderForm() {
       return;
     }
 
+    const priceNum = parseFloat(price);
+    const qtyNum = parseFloat(quantity);
+    const sideNum = side === "buy" ? 0 : 1;
+
+    // Check vault balance
+    const requiredAmount = sideNum === 0 ? priceNum * qtyNum : qtyNum;
+    if (vaultBalance.available < requiredAmount) {
+      toast({
+        title: "Insufficient vault balance",
+        description: `Required: ${requiredAmount}, Available: ${vaultBalance.available}. Please deposit funds first.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Step 1: Request payment intent (HTTP 402)
-      const backendUrl =
-        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
-      const intentResponse = await fetch(
-        `${backendUrl}/api/auth/request-intent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sender: account?.address,
-            recipient: process.env.NEXT_PUBLIC_MODULE_ADDRESS,
-            amount: parseFloat(price) * parseFloat(quantity),
-          }),
-        }
-      );
+      const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+      const orderBookAddress =
+        process.env.NEXT_PUBLIC_ORDER_BOOK_ADDRESS || moduleAddress;
 
-      if (intentResponse.status !== 402) {
-        throw new Error("Failed to get payment intent");
-      }
-
-      const intentData = await intentResponse.json();
-      const { intent } = intentData;
-
-      // Step 2: Sign the payment authorization
-      // Construct BCS message matching Move contract's verification format
-      const bcsMessage = constructBCSAuthMessage(
-        intent.sender,
-        intent.recipient,
-        intent.amount,
-        intent.nonce,
-        intent.expiry
-      );
-
-      // Convert to hex string for wallet display
-      const messageHex = Array.from(bcsMessage)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
-      const signedMessage = await signMessage({
-        message: messageHex,
-        nonce: intent.nonce.toString(),
+      // Place order directly - user signs the transaction
+      const response = await signAndSubmitTransaction({
+        sender: account.address,
+        data: {
+          function: `${moduleAddress}::order_book::place_order`,
+          functionArguments: [orderBookAddress, priceNum, qtyNum, sideNum],
+        },
       });
-
-      console.log("Signed message result:", signedMessage);
-      console.log("Account public key:", account?.publicKey);
-      console.log("Signature type:", typeof signedMessage.signature);
-      console.log("Signature object:", signedMessage.signature);
-
-      // Extract signature from various possible formats
-      let signatureHex: string;
-      const sig = signedMessage.signature;
-
-      if (typeof sig === "string") {
-        signatureHex = sig;
-      } else if (sig && typeof sig === "object") {
-        // Try different methods to extract the signature
-        if ("toString" in sig && typeof sig.toString === "function") {
-          const sigStr = sig.toString();
-          // Check if toString returns a hex string
-          if (sigStr.startsWith("0x") || /^[0-9a-fA-F]+$/.test(sigStr)) {
-            signatureHex = sigStr;
-          } else {
-            throw new Error("Signature toString() did not return a hex string");
-          }
-        } else if (
-          "toHexString" in sig &&
-          typeof (sig as any).toHexString === "function"
-        ) {
-          signatureHex = (sig as any).toHexString();
-        } else if (
-          "toBytes" in sig &&
-          typeof (sig as any).toBytes === "function"
-        ) {
-          const bytes = (sig as any).toBytes();
-          signatureHex = Array.from(bytes as Uint8Array)
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join("");
-        } else if (sig instanceof Uint8Array) {
-          signatureHex = Array.from(sig)
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join("");
-        } else {
-          throw new Error(
-            `Unable to extract signature. Type: ${typeof sig}, Constructor: ${
-              sig.constructor?.name
-            }`
-          );
-        }
-      } else {
-        throw new Error(`Unknown signature format: ${typeof sig}`);
-      }
-
-      // Remove 0x prefix if present
-      if (signatureHex.startsWith("0x")) {
-        signatureHex = signatureHex.slice(2);
-      }
-
-      console.log("Extracted signature hex:", signatureHex);
-
-      let publicKeyHex = account?.publicKey as string;
-      if (typeof publicKeyHex !== "string") {
-        // Convert to hex if needed
-        publicKeyHex = Array.from(publicKeyHex as Uint8Array)
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
-      }
-      // Remove 0x prefix if present
-      if (publicKeyHex.startsWith("0x")) {
-        publicKeyHex = publicKeyHex.slice(2);
-      }
-
-      // Step 3: Submit signed authorization
-      const authPayload = {
-        sender: intent.sender,
-        recipient: intent.recipient,
-        amount: intent.amount,
-        nonce: intent.nonce,
-        expiry: intent.expiry,
-        signature: signatureHex,
-        publicKey: publicKeyHex,
-      };
-
-      console.log("Submitting authorization with payload:", authPayload);
-
-      const authResponse = await fetch(
-        `${backendUrl}/api/auth/submit-authorization`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(authPayload),
-        }
-      );
-
-      if (!authResponse.ok) {
-        const errorData = await authResponse
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
-        console.error("Authorization failed:", errorData);
-        throw new Error(
-          errorData.error ||
-            errorData.message ||
-            "Failed to submit authorization"
-        );
-      }
-
-      const authResult = await authResponse.json();
-
-      // Step 4: Place order
-      const orderResponse = await fetch(`${backendUrl}/api/orders/place`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userAddress: account?.address,
-          price: parseFloat(price),
-          quantity: parseFloat(quantity),
-          side: side === "buy" ? 0 : 1,
-        }),
-      });
-
-      if (!orderResponse.ok) {
-        throw new Error("Failed to place order");
-      }
-
-      const orderResult = await orderResponse.json();
 
       toast({
         title: "Order placed successfully!",
@@ -351,28 +166,27 @@ export function OrderForm() {
     <Card className="border-muted/40">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">New Order</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {connected && !nonceStoreInitialized && (
-          <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-            <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2 text-sm">
-              Account Setup Required
-            </h3>
-            <p className="text-xs text-yellow-800 dark:text-yellow-200 mb-3">
-              Initialize your account for payment authorization (one-time
-              setup).
-            </p>
-            <Button
-              onClick={initializeNonceStore}
-              disabled={loading}
-              size="sm"
-              className="w-full"
-            >
-              {loading ? "Initializing..." : "Initialize Account"}
-            </Button>
+        {connected && (
+          <div className="mt-2 p-2.5 bg-muted/50 rounded border">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+              Vault Balance
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Available:</span>
+              <span className="font-mono font-medium">
+                {vaultBalance.available}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Locked:</span>
+              <span className="font-mono font-medium">
+                {vaultBalance.locked}
+              </span>
+            </div>
           </div>
         )}
-
+      </CardHeader>
+      <CardContent>
         <Tabs defaultValue="buy" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="buy" className="text-sm">
