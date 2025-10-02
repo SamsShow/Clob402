@@ -57,3 +57,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .logo-light {
+    filter: brightness(0);
+  }
+  .dark .logo-dark {
+    filter: brightness(0) invert(1);
+  }
+}

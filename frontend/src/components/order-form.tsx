@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { AccountAddress } from "@aptos-labs/ts-sdk";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,7 +64,7 @@ function constructBCSAuthMessage(
 }
 
 export function OrderForm() {
-  const { account, connected, signMessage } = useWallet();
+  const { account, connected, signMessage, signAndSubmitTransaction } = useWallet();
   const { toast } = useToast();
 
   const [buyPrice, setBuyPrice] = useState("");
@@ -72,6 +72,58 @@ export function OrderForm() {
   const [sellPrice, setSellPrice] = useState("");
   const [sellQuantity, setSellQuantity] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nonceStoreInitialized, setNonceStoreInitialized] = useState(false);
+
+  // Check if nonce store is initialized
+  useEffect(() => {
+    const checkNonceStore = async () => {
+      if (!connected || !account) return;
+      
+      try {
+        const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+        const response = await fetch(`https://api.testnet.aptoslabs.com/v1/accounts/${account.address}/resource/0x${moduleAddress?.replace('0x', '')}::payment_with_auth::NonceStore`);
+        setNonceStoreInitialized(response.ok);
+      } catch {
+        setNonceStoreInitialized(false);
+      }
+    };
+    
+    checkNonceStore();
+  }, [connected, account]);
+
+  const initializeNonceStore = async () => {
+    if (!connected) return;
+    
+    setLoading(true);
+    try {
+      const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
+      
+      const transaction = {
+        data: {
+          function: `${moduleAddress}::payment_with_auth::initialize_nonce_store`,
+          functionArguments: [],
+        },
+      };
+
+      const response = await signAndSubmitTransaction(transaction);
+      
+      toast({
+        title: "Initialization successful!",
+        description: "Your account is now ready to place orders",
+      });
+      
+      setNonceStoreInitialized(true);
+    } catch (error: any) {
+      console.error("Error initializing nonce store:", error);
+      toast({
+        title: "Initialization failed",
+        description: error.message || "Failed to initialize account",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePlaceOrder = async (side: "buy" | "sell") => {
     if (!connected) {
@@ -143,19 +195,59 @@ export function OrderForm() {
 
       console.log("Signed message result:", signedMessage);
       console.log("Account public key:", account?.publicKey);
+      console.log("Signature type:", typeof signedMessage.signature);
+      console.log("Signature object:", signedMessage.signature);
 
-      // Ensure signature and publicKey are in hex string format
-      let signatureHex = signedMessage.signature;
-      if (typeof signatureHex !== "string") {
-        // Convert Uint8Array to hex string if needed
-        signatureHex = Array.from(signatureHex as Uint8Array)
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
+      // Extract signature from various possible formats
+      let signatureHex: string;
+      const sig = signedMessage.signature;
+
+      if (typeof sig === "string") {
+        signatureHex = sig;
+      } else if (sig && typeof sig === "object") {
+        // Try different methods to extract the signature
+        if ("toString" in sig && typeof sig.toString === "function") {
+          const sigStr = sig.toString();
+          // Check if toString returns a hex string
+          if (sigStr.startsWith("0x") || /^[0-9a-fA-F]+$/.test(sigStr)) {
+            signatureHex = sigStr;
+          } else {
+            throw new Error("Signature toString() did not return a hex string");
+          }
+        } else if (
+          "toHexString" in sig &&
+          typeof (sig as any).toHexString === "function"
+        ) {
+          signatureHex = (sig as any).toHexString();
+        } else if (
+          "toBytes" in sig &&
+          typeof (sig as any).toBytes === "function"
+        ) {
+          const bytes = (sig as any).toBytes();
+          signatureHex = Array.from(bytes)
+            .map((b: number) => b.toString(16).padStart(2, "0"))
+            .join("");
+        } else if (sig instanceof Uint8Array) {
+          signatureHex = Array.from(sig)
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+        } else {
+          throw new Error(
+            `Unable to extract signature. Type: ${typeof sig}, Constructor: ${
+              sig.constructor?.name
+            }`
+          );
+        }
+      } else {
+        throw new Error(`Unknown signature format: ${typeof sig}`);
       }
+
       // Remove 0x prefix if present
       if (signatureHex.startsWith("0x")) {
         signatureHex = signatureHex.slice(2);
       }
+
+      console.log("Extracted signature hex:", signatureHex);
 
       let publicKeyHex = account?.publicKey as string;
       if (typeof publicKeyHex !== "string") {

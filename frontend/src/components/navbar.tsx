@@ -28,7 +28,7 @@ export function Navbar() {
                 alt="Clob402"
                 width={32}
                 height={32}
-                className="opacity-90 dark:opacity-100 [filter:brightness(0)] dark:[filter:brightness(1)_invert(1)]"
+                className="logo-light logo-dark transition-all duration-200"
               />
             </div>
             <div className="flex flex-col -space-y-1">
