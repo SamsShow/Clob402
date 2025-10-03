@@ -123,6 +123,60 @@ module clob_strategy_vault::strategy_vault {
         });
     }
 
+    /// Credit deposit for gasless flow - coins already in vault
+    /// Called AFTER payment_with_auth::transfer_with_authorization
+    /// This allows gasless deposits where user only signs a message
+    public entry fun credit_deposit<CoinType>(
+        facilitator: &signer,
+        vault_addr: address,
+        user_addr: address,
+        amount: u64
+    ) acquires Vault {
+        assert!(exists<Vault>(vault_addr), E_VAULT_NOT_INITIALIZED);
+        assert!(amount > 0, E_INVALID_AMOUNT);
+
+        let vault = borrow_global_mut<Vault>(vault_addr);
+        assert!(vault.is_active, E_UNAUTHORIZED);
+
+        // Calculate shares to mint
+        let shares_to_mint = if (vault.total_shares == 0) {
+            amount  // First deposit: 1:1 ratio
+        } else {
+            (amount * vault.total_shares) / vault.total_deposits
+        };
+
+        // Update vault state
+        vault.total_deposits = vault.total_deposits + amount;
+        vault.total_shares = vault.total_shares + shares_to_mint;
+
+        // Update user shares
+        if (!table::contains(&vault.user_shares, user_addr)) {
+            table::add(&mut vault.user_shares, user_addr, 0);
+        };
+        let user_shares = table::borrow_mut(&mut vault.user_shares, user_addr);
+        *user_shares = *user_shares + shares_to_mint;
+
+        // Initialize and update user available balance
+        if (!table::contains(&vault.user_available_balance, user_addr)) {
+            table::add(&mut vault.user_available_balance, user_addr, 0);
+        };
+        if (!table::contains(&vault.user_locked_balance, user_addr)) {
+            table::add(&mut vault.user_locked_balance, user_addr, 0);
+        };
+        let available_balance = table::borrow_mut(&mut vault.user_available_balance, user_addr);
+        *available_balance = *available_balance + amount;
+
+        // NOTE: Coins are already in vault from transfer_with_authorization
+        // We only update accounting here
+
+        event::emit(DepositEvent {
+            user: user_addr,
+            amount,
+            shares_minted: shares_to_mint,
+            timestamp: timestamp::now_seconds(),
+        });
+    }
+
     /// Withdraw funds from vault by burning shares
     public entry fun withdraw<CoinType>(
         user: &signer,

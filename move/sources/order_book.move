@@ -148,6 +148,68 @@ module clob_strategy_vault::order_book {
         });
     }
 
+    /// Place an order on behalf of a user (gasless)
+    /// Called by facilitator after verifying user's signed authorization
+    /// User signed off-chain authorization to place this order
+    public entry fun place_order_for_user(
+        facilitator: &signer,
+        order_book_addr: address,
+        user_addr: address,
+        price: u64,
+        quantity: u64,
+        side: u8
+    ) acquires OrderBook {
+        assert!(exists<OrderBook>(order_book_addr), E_ORDER_BOOK_NOT_INITIALIZED);
+        assert!(price > 0, E_INVALID_PRICE);
+        assert!(quantity > 0, E_INVALID_QUANTITY);
+
+        let order_book = borrow_global_mut<OrderBook>(order_book_addr);
+        
+        // Calculate amount to lock based on order side
+        let lock_amount = if (side == ORDER_SIDE_BID) {
+            price * quantity  // Buy order: lock USDC (price * quantity)
+        } else {
+            quantity  // Sell order: lock APT (quantity)
+        };
+
+        // Lock user's funds in vault (facilitator calls this, but locks user's funds)
+        strategy_vault::lock_balance(order_book.vault_address, user_addr, lock_amount);
+
+        let order_id = order_book.next_order_id;
+        order_book.next_order_id = order_id + 1;
+
+        let current_time = timestamp::now_seconds();
+
+        let order = Order {
+            order_id,
+            owner: user_addr,  // User is the owner, not facilitator
+            price,
+            quantity,
+            filled_quantity: 0,
+            side,
+            status: ORDER_STATUS_OPEN,
+            timestamp: current_time,
+        };
+
+        smart_table::add(&mut order_book.orders, order_id, order);
+
+        // Add to user's order list
+        if (!table::contains(&order_book.user_orders, user_addr)) {
+            table::add(&mut order_book.user_orders, user_addr, vector::empty<u64>());
+        };
+        let user_order_list = table::borrow_mut(&mut order_book.user_orders, user_addr);
+        vector::push_back(user_order_list, order_id);
+
+        event::emit(OrderPlacedEvent {
+            order_id,
+            owner: user_addr,
+            price,
+            quantity,
+            side,
+            timestamp: current_time,
+        });
+    }
+
     /// Cancel an order
     /// Unlocks remaining funds back to user's available balance
     public entry fun cancel_order(

@@ -9,8 +9,19 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
+interface OrderIntent {
+  userAddress: string;
+  orderBookAddress: string;
+  price: number;
+  quantity: number;
+  side: number;
+  nonce: number;
+  expiry: number;
+  network: string;
+}
+
 export function OrderForm() {
-  const { account, connected, signAndSubmitTransaction } = useWallet();
+  const { account, connected, signMessage } = useWallet();
   const { toast } = useToast();
 
   const [buyPrice, setBuyPrice] = useState("");
@@ -85,10 +96,20 @@ export function OrderForm() {
   }, [connected, account]);
 
   const handlePlaceOrder = async (side: "buy" | "sell") => {
-    if (!connected) {
+    if (!connected || !account) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to place orders",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!signMessage) {
+      toast({
+        title: "Wallet not supported",
+        description:
+          "Your wallet doesn't support message signing. Please use Petra or Martian wallet.",
         variant: "destructive",
       });
       return;
@@ -124,22 +145,70 @@ export function OrderForm() {
     setLoading(true);
 
     try {
-      const moduleAddress = process.env.NEXT_PUBLIC_MODULE_ADDRESS;
-      const orderBookAddress =
-        process.env.NEXT_PUBLIC_ORDER_BOOK_ADDRESS || moduleAddress;
+      const backendUrl =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
-      // Place order directly - user signs the transaction
-      const response = await signAndSubmitTransaction({
-        sender: account.address,
-        data: {
-          function: `${moduleAddress}::order_book::place_order`,
-          functionArguments: [orderBookAddress, priceNum, qtyNum, sideNum],
-        },
+      // Step 1: Request order intent from backend
+      const intentResponse = await fetch(
+        `${backendUrl}/api/orders/order-intent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userAddress: account.address,
+            price: priceNum,
+            quantity: qtyNum,
+            side: sideNum,
+          }),
+        }
+      );
+
+      if (!intentResponse.ok) {
+        const error = await intentResponse.json();
+        throw new Error(error.message || "Failed to create order intent");
+      }
+
+      const intentData = await intentResponse.json();
+      const intent: OrderIntent = intentData.intent;
+      const messageToSign = intentData.messageToSign;
+
+      // Step 2: User signs the message (NOT a transaction!)
+      toast({
+        title: "🔏 Sign Message",
+        description: "Please sign the message to place your order (no gas!)",
       });
 
+      const { signature, fullMessage } = await signMessage({
+        message: messageToSign,
+        nonce: intent.nonce.toString(),
+      });
+
+      // Step 3: Submit signed authorization to backend
+      const placeResponse = await fetch(`${backendUrl}/api/orders/place`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userAddress: account.address,
+          price: priceNum,
+          quantity: qtyNum,
+          side: sideNum,
+          nonce: intent.nonce,
+          expiry: intent.expiry,
+          signature: signature,
+          publicKey: account.publicKey,
+        }),
+      });
+
+      if (!placeResponse.ok) {
+        const error = await placeResponse.json();
+        throw new Error(error.message || "Failed to place order");
+      }
+
+      const result = await placeResponse.json();
+
       toast({
-        title: "Order placed successfully!",
-        description: `${side.toUpperCase()} ${quantity} @ $${price}`,
+        title: "✅ Order Placed (No Gas!)",
+        description: `${side.toUpperCase()} ${quantity} @ $${price} • You paid NO gas!`,
       });
 
       // Reset form
@@ -258,7 +327,7 @@ export function OrderForm() {
               onClick={() => handlePlaceOrder("buy")}
               disabled={loading || !connected}
             >
-              {loading ? "Placing..." : "Buy APT"}
+              {loading ? "Placing..." : "Buy APT"} {!loading && "⚡"}
             </Button>
           </TabsContent>
 
@@ -325,7 +394,7 @@ export function OrderForm() {
               onClick={() => handlePlaceOrder("sell")}
               disabled={loading || !connected}
             >
-              {loading ? "Placing..." : "Sell APT"}
+              {loading ? "Placing..." : "Sell APT"} {!loading && "⚡"}
             </Button>
           </TabsContent>
         </Tabs>

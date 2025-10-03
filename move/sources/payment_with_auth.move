@@ -91,8 +91,64 @@ module clob_strategy_vault::payment_with_auth {
     }
 
     /// Construct authorization message for signing
-    /// This matches the format that Aptos wallets use for signMessage
+    /// EXACT format that Aptos wallet uses when signing messages
     fun construct_authorization_message(
+        sender: address,
+        recipient: address,
+        amount: u64,
+        nonce: u64,
+        expiry: u64
+    ): vector<u8> {
+        // Build the inner message first (what we want to sign)
+        let inner_message = address_to_string(sender);
+        vector::append(&mut inner_message, b":");
+        vector::append(&mut inner_message, address_to_string(recipient));
+        vector::append(&mut inner_message, b":");
+        vector::append(&mut inner_message, u64_to_string(amount));
+        vector::append(&mut inner_message, b":");
+        vector::append(&mut inner_message, u64_to_string(nonce));
+        vector::append(&mut inner_message, b":");
+        vector::append(&mut inner_message, u64_to_string(expiry));
+        
+        // Aptos wallet wraps it with:
+        // APTOS\nmessage: {inner_message}\nnonce: {nonce}
+        let full_message = b"APTOS\nmessage: ";
+        vector::append(&mut full_message, inner_message);
+        vector::append(&mut full_message, b"\nnonce: ");
+        vector::append(&mut full_message, u64_to_string(nonce));
+        
+        full_message
+    }
+    
+    /// Convert address to hex string
+    fun address_to_string(addr: address): vector<u8> {
+        let addr_bytes = bcs::to_bytes(&addr);
+        let result = b"0x";
+        vector::append(&mut result, to_hex_string(&addr_bytes));
+        result
+    }
+    
+    /// Convert u64 to string
+    fun u64_to_string(value: u64): vector<u8> {
+        if (value == 0) {
+            return b"0"
+        };
+        
+        let result = vector::empty<u8>();
+        let temp = value;
+        
+        while (temp > 0) {
+            let digit = ((temp % 10) as u8) + 48; // ASCII '0' = 48
+            vector::push_back(&mut result, digit);
+            temp = temp / 10;
+        };
+        
+        vector::reverse(&mut result);
+        result
+    }
+    
+    /// OLD CODE - keeping for reference but not used
+    fun construct_authorization_message_old(
         sender: address,
         recipient: address,
         amount: u64,

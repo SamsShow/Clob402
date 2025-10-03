@@ -12,10 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, Wallet as WalletIcon, Users } from "lucide-react";
+import { TrendingUp, Wallet as WalletIcon, Users, Zap } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { executeGaslessPayment } from "@/lib/gasless";
 
 export function VaultDashboard() {
-  const { account, connected } = useWallet();
+  const { account, connected, signMessage, signAndSubmitTransaction } =
+    useWallet();
+  const { toast } = useToast();
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawShares, setWithdrawShares] = useState("");
   const [userShares, setUserShares] = useState(0);
@@ -62,27 +66,113 @@ export function VaultDashboard() {
   };
 
   const handleDeposit = async () => {
-    if (!depositAmount || parseFloat(depositAmount) <= 0) return;
+    if (!depositAmount || parseFloat(depositAmount) <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!account || !connected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!signMessage) {
+      toast({
+        title: "Wallet Error",
+        description: "Your wallet doesn't support message signing",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
       const backendUrl =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
-      const response = await fetch(`${backendUrl}/api/vault/deposit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userAddress: account?.address,
-          amount: parseFloat(depositAmount),
-        }),
+
+      toast({
+        title: "🔏 Sign Message",
+        description: "Please sign the authorization message (no gas required!)",
       });
 
-      if (response.ok) {
-        setDepositAmount("");
-        await fetchVaultData();
-      }
-    } catch (error) {
+      // Execute gasless payment - user only signs a message!
+      const result = await executeGaslessPayment(
+        backendUrl,
+        account.address,
+        account.publicKey?.toString() || "",
+        Math.floor(parseFloat(depositAmount) * 100000000), // Convert to octas
+        signMessage,
+        "/api/vault/deposit-intent",
+        "/api/vault/deposit"
+      );
+
+      toast({
+        title: "✅ Deposit Successful!",
+        description: `You paid NO gas! Transaction: ${result.transactionHash.slice(
+          0,
+          8
+        )}...`,
+      });
+
+      setDepositAmount("");
+      await fetchVaultData();
+    } catch (error: any) {
       console.error("Error depositing:", error);
+
+      // Check if it's a nonce store initialization error
+      if (
+        error.message &&
+        error.message.includes("E_NONCE_STORE_NOT_INITIALIZED")
+      ) {
+        // Auto-initialize for the user
+        if (signAndSubmitTransaction && account) {
+          try {
+            toast({
+              title: "🔐 First-Time Setup",
+              description:
+                "Initializing your account for gasless transactions (one-time fee ~$0.001)...",
+            });
+
+            await signAndSubmitTransaction({
+              sender: account.address,
+              data: {
+                function: `${process.env.NEXT_PUBLIC_MODULE_ADDRESS}::payment_with_auth::initialize_nonce_store`,
+                functionArguments: [],
+              },
+            });
+
+            toast({
+              title: "✅ Account Initialized!",
+              description:
+                "You can now make gasless deposits! Please try your deposit again.",
+            });
+
+            return; // Don't show error, initialization succeeded
+          } catch (initError: any) {
+            console.error("Initialization error:", initError);
+            toast({
+              title: "Initialization Failed",
+              description: "Please try again or contact support.",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+      }
+
+      toast({
+        title: "Deposit Failed",
+        description: error.message || "Failed to deposit",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -225,8 +315,18 @@ export function VaultDashboard() {
             onClick={handleDeposit}
             disabled={loading || !connected || !depositAmount}
           >
-            {loading ? "Depositing..." : "Deposit USDC"}
+            {loading ? (
+              "Processing..."
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 mr-1.5" />
+                Deposit (No Gas!)
+              </>
+            )}
           </Button>
+          <p className="text-[10px] text-muted-foreground text-center mt-2">
+            ⚡ Gasless deposit - you only sign a message!
+          </p>
         </CardContent>
       </Card>
 
