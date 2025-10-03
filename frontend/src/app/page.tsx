@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HeroSection } from "@/components/hero-section";
 import { Navbar } from "@/components/navbar";
 import { OrderBook } from "@/components/order-book";
 import { OrderForm } from "@/components/order-form";
@@ -9,7 +10,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrendingUp, Vault } from "lucide-react";
 
 export default function Home() {
+  const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState("trade");
+
+  const handleLaunchApp = () => {
+    console.log("Launch button clicked - showing app");
+    setShowApp(true);
+  };
+
+  if (!showApp) {
+    return <HeroSection onLaunchApp={handleLaunchApp} />;
+  }
 
   return (
     <main className="min-h-screen bg-background">
