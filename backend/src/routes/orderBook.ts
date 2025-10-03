@@ -339,3 +339,105 @@ orderBookRouter.get("/order/:orderId", async (req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * Get all orders from the order book
+ * Returns all bids and asks (open orders only)
+ */
+orderBookRouter.get("/all", async (req: Request, res: Response) => {
+  try {
+    // Get the OrderBook resource from the blockchain
+    const orderBookResource = await aptosClient.getAccountResource({
+      accountAddress: ORDER_BOOK_ADDRESS,
+      resourceType: `${MODULE_ADDRESS}::order_book::OrderBook`,
+    });
+
+    if (!orderBookResource) {
+      return res.json({
+        success: true,
+        bids: [],
+        asks: [],
+        spread: 0,
+        orderBookAddress: ORDER_BOOK_ADDRESS,
+        message: "Order book not initialized",
+      });
+    }
+
+    const orderBookData = orderBookResource as any;
+    const nextOrderId = Number(orderBookData.next_order_id || "1");
+
+    // Fetch all orders
+    const bids: any[] = [];
+    const asks: any[] = [];
+
+    // Query orders from 1 to next_order_id - 1
+    for (let orderId = 1; orderId < nextOrderId; orderId++) {
+      try {
+        const orderResult = await aptosClient.view({
+          payload: {
+            function: `${MODULE_ADDRESS}::order_book::get_order`,
+            functionArguments: [ORDER_BOOK_ADDRESS, orderId.toString()],
+          },
+        });
+
+        const order = orderResult[0] as any;
+
+        // Only include open orders (status 0) or partially filled (status 3)
+        if (order.status === 0 || order.status === 3) {
+          const orderData = {
+            order_id: Number(order.order_id),
+            owner: order.owner,
+            price: Number(order.price),
+            quantity: Number(order.quantity),
+            filled_quantity: Number(order.filled_quantity),
+            remaining_quantity:
+              Number(order.quantity) - Number(order.filled_quantity),
+            side: Number(order.side),
+            status: Number(order.status),
+            timestamp: Number(order.timestamp),
+            total:
+              Number(order.price) *
+              (Number(order.quantity) - Number(order.filled_quantity)),
+          };
+
+          if (orderData.side === 0) {
+            bids.push(orderData);
+          } else {
+            asks.push(orderData);
+          }
+        }
+      } catch (err: any) {
+        // Order might not exist or might be an error, skip it
+        if (!err.message?.includes("ORDER_NOT_FOUND")) {
+          logger.debug(`Skipping order ${orderId}:`, err.message);
+        }
+      }
+    }
+
+    // Sort bids by price descending (highest first)
+    bids.sort((a, b) => b.price - a.price);
+
+    // Sort asks by price ascending (lowest first)
+    asks.sort((a, b) => a.price - b.price);
+
+    logger.info("Retrieved order book", {
+      totalBids: bids.length,
+      totalAsks: asks.length,
+    });
+
+    res.json({
+      success: true,
+      bids,
+      asks,
+      spread:
+        asks.length > 0 && bids.length > 0 ? asks[0].price - bids[0].price : 0,
+      orderBookAddress: ORDER_BOOK_ADDRESS,
+    });
+  } catch (error: any) {
+    logger.error("Error getting order book:", error);
+    res.status(500).json({
+      error: "Failed to retrieve order book",
+      message: error.message,
+    });
+  }
+});

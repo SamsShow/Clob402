@@ -2,34 +2,58 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowDownIcon, RefreshCwIcon } from "lucide-react";
 
 interface Order {
+  order_id: number;
+  owner: string;
   price: number;
   quantity: number;
+  filled_quantity: number;
+  remaining_quantity: number;
+  side: number;
+  status: number;
+  timestamp: number;
   total: number;
 }
 
+const OCTAS_TO_APT = 100_000_000;
+
 export function OrderBook() {
-  // Mock order book data - in production, fetch from backend
-  const [bids, setBids] = useState<Order[]>([
-    { price: 10.5, quantity: 100, total: 1050 },
-    { price: 10.45, quantity: 250, total: 2612.5 },
-    { price: 10.4, quantity: 150, total: 1560 },
-    { price: 10.35, quantity: 300, total: 3105 },
-    { price: 10.3, quantity: 200, total: 2060 },
-  ]);
+  const [bids, setBids] = useState<Order[]>([]);
+  const [asks, setAsks] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const [asks, setAsks] = useState<Order[]>([
-    { price: 10.55, quantity: 150, total: 1582.5 },
-    { price: 10.6, quantity: 200, total: 2120 },
-    { price: 10.65, quantity: 100, total: 1065 },
-    { price: 10.7, quantity: 250, total: 2675 },
-    { price: 10.75, quantity: 180, total: 1935 },
-  ]);
+  const fetchOrderBook = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/orders/all");
+      if (response.ok) {
+        const data = await response.json();
+        setBids(data.bids || []);
+        setAsks(data.asks || []);
+        setLastUpdate(new Date());
+      }
+    } catch (error) {
+      console.error("Error fetching order book:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const spread = asks[0]?.price - bids[0]?.price;
-  const spreadPercent = ((spread / bids[0]?.price) * 100).toFixed(2);
+  useEffect(() => {
+    fetchOrderBook();
+
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(fetchOrderBook, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const spread =
+    asks[0]?.price && bids[0]?.price ? asks[0].price - bids[0].price : 0;
+  const spreadPercent = bids[0]?.price
+    ? ((spread / bids[0].price) * 100).toFixed(2)
+    : "0";
 
   return (
     <Card className="border-muted/40">
@@ -37,85 +61,121 @@ export function OrderBook() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">Order Book</CardTitle>
           <div className="flex items-center gap-4 text-xs">
+            {lastUpdate && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <RefreshCwIcon className="w-3 h-3" />
+                <span>{lastUpdate.toLocaleTimeString()}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span className="text-muted-foreground">Spread</span>
               <span className="font-mono font-medium">
-                ${spread.toFixed(2)}
+                {spread > 0 ? spread.toLocaleString() : "—"} octas
               </span>
-              <span className="text-muted-foreground">({spreadPercent}%)</span>
+              {spread > 0 && bids[0] && (
+                <span className="text-muted-foreground">
+                  ({spreadPercent}%)
+                </span>
+              )}
             </div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-1">
-        {/* Order Book Table */}
-        <div className="grid grid-cols-2 gap-6">
-          {/* Asks */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-2 px-1">
-              <ArrowDownIcon className="w-3.5 h-3.5 text-red-500" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Sell Orders
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              <div className="grid grid-cols-3 text-[10px] text-muted-foreground mb-1.5 px-1 uppercase tracking-wider">
-                <div>Price</div>
-                <div className="text-right">Size</div>
-                <div className="text-right">Total</div>
-              </div>
-              {asks.map((ask, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-3 text-sm hover:bg-red-500/5 px-1 py-0.5 rounded cursor-pointer transition-colors"
-                >
-                  <div className="text-red-500 font-medium font-mono">
-                    {ask.price.toFixed(2)}
-                  </div>
-                  <div className="text-right font-mono text-xs">
-                    {ask.quantity}
-                  </div>
-                  <div className="text-right text-muted-foreground font-mono text-xs">
-                    {ask.total.toFixed(0)}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <RefreshCwIcon className="w-4 h-4 animate-spin mr-2" />
+            Loading orders...
           </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-6">
+            {/* Asks */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2 px-1">
+                <ArrowDownIcon className="w-3.5 h-3.5 text-red-500" />
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Sell Orders ({asks.length})
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                <div className="grid grid-cols-3 text-[10px] text-muted-foreground mb-1.5 px-1 uppercase tracking-wider">
+                  <div>Price (octas)</div>
+                  <div className="text-right">Size (APT)</div>
+                  <div className="text-right">Total (octas)</div>
+                </div>
+                {asks.length === 0 ? (
+                  <div className="text-center text-xs text-muted-foreground py-4">
+                    No sell orders
+                  </div>
+                ) : (
+                  asks.slice(0, 10).map((ask) => (
+                    <div
+                      key={ask.order_id}
+                      className="grid grid-cols-3 text-sm hover:bg-red-500/5 px-1 py-0.5 rounded cursor-pointer transition-colors"
+                      title={`Order #${ask.order_id} by ${ask.owner.slice(
+                        0,
+                        6
+                      )}...${ask.owner.slice(-4)}`}
+                    >
+                      <div className="text-red-500 font-medium font-mono">
+                        {ask.price.toLocaleString()}
+                      </div>
+                      <div className="text-right font-mono text-xs">
+                        {(ask.remaining_quantity / OCTAS_TO_APT).toFixed(4)}
+                      </div>
+                      <div className="text-right text-muted-foreground font-mono text-xs">
+                        {ask.total.toLocaleString()}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-          {/* Bids */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-2 px-1">
-              <ArrowUpIcon className="w-3.5 h-3.5 text-green-500" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Buy Orders
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              <div className="grid grid-cols-3 text-[10px] text-muted-foreground mb-1.5 px-1 uppercase tracking-wider">
-                <div>Price</div>
-                <div className="text-right">Size</div>
-                <div className="text-right">Total</div>
+            {/* Bids */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2 px-1">
+                <ArrowUpIcon className="w-3.5 h-3.5 text-green-500" />
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Buy Orders ({bids.length})
+                </span>
               </div>
-              {bids.map((bid, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-3 text-sm hover:bg-green-500/5 px-1 py-0.5 rounded cursor-pointer transition-colors"
-                >
-                  <div className="text-green-500 font-medium font-mono">
-                    {bid.price.toFixed(2)}
-                  </div>
-                  <div className="text-right font-mono text-xs">
-                    {bid.quantity}
-                  </div>
-                  <div className="text-right text-muted-foreground font-mono text-xs">
-                    {bid.total.toFixed(0)}
-                  </div>
+              <div className="space-y-0.5">
+                <div className="grid grid-cols-3 text-[10px] text-muted-foreground mb-1.5 px-1 uppercase tracking-wider">
+                  <div>Price (octas)</div>
+                  <div className="text-right">Size (APT)</div>
+                  <div className="text-right">Total (octas)</div>
                 </div>
-              ))}
+                {bids.length === 0 ? (
+                  <div className="text-center text-xs text-muted-foreground py-4">
+                    No buy orders
+                  </div>
+                ) : (
+                  bids.slice(0, 10).map((bid) => (
+                    <div
+                      key={bid.order_id}
+                      className="grid grid-cols-3 text-sm hover:bg-green-500/5 px-1 py-0.5 rounded cursor-pointer transition-colors"
+                      title={`Order #${bid.order_id} by ${bid.owner.slice(
+                        0,
+                        6
+                      )}...${bid.owner.slice(-4)}`}
+                    >
+                      <div className="text-green-500 font-medium font-mono">
+                        {bid.price.toLocaleString()}
+                      </div>
+                      <div className="text-right font-mono text-xs">
+                        {(bid.remaining_quantity / OCTAS_TO_APT).toFixed(4)}
+                      </div>
+                      <div className="text-right text-muted-foreground font-mono text-xs">
+                        {bid.total.toLocaleString()}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );
