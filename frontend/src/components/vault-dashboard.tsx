@@ -225,7 +225,7 @@ export function VaultDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              ${vaultInfo.totalDeposits.toLocaleString()}
+              {(vaultInfo.totalDeposits / 100000000).toFixed(4)} APT
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
               {vaultInfo.totalShares.toLocaleString()} shares issued
@@ -242,10 +242,10 @@ export function VaultDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              {Number(userShares).toLocaleString()}
+              {(userValue / 100000000).toFixed(4)} APT
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
-              ≈ ${userValue.toFixed(2)} USDC
+              {Number(userShares).toLocaleString()} shares
             </p>
           </CardContent>
         </Card>

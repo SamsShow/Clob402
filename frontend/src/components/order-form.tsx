@@ -243,13 +243,13 @@ export function OrderForm() {
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Available:</span>
               <span className="font-mono font-medium">
-                {vaultBalance.available}
+                {(vaultBalance.available / 100000000).toFixed(4)} APT
               </span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Locked:</span>
               <span className="font-mono font-medium">
-                {vaultBalance.locked}
+                {(vaultBalance.locked / 100000000).toFixed(4)} APT
               </span>
             </div>
           </div>
@@ -285,7 +285,7 @@ export function OrderForm() {
                   className="font-mono pr-14"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  USDC
+                  octas
                 </span>
               </div>
             </div>
@@ -318,7 +318,7 @@ export function OrderForm() {
                   {(
                     (parseFloat(buyPrice) || 0) * (parseFloat(buyQuantity) || 0)
                   ).toFixed(2)}{" "}
-                  <span className="text-muted-foreground">USDC</span>
+                  <span className="text-muted-foreground">octas</span>
                 </span>
               </div>
             </div>
@@ -350,7 +350,7 @@ export function OrderForm() {
                   className="font-mono pr-14"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  USDC
+                  octas
                 </span>
               </div>
             </div>
@@ -384,7 +384,7 @@ export function OrderForm() {
                     (parseFloat(sellPrice) || 0) *
                     (parseFloat(sellQuantity) || 0)
                   ).toFixed(2)}{" "}
-                  <span className="text-muted-foreground">USDC</span>
+                  <span className="text-muted-foreground">octas</span>
                 </span>
               </div>
             </div>
