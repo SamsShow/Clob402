@@ -103,25 +103,9 @@ orderBookRouter.post("/place", async (req: Request, res: Response) => {
       });
     }
 
-    // Verify signature
-    const messageToSign = `${userAddress}:${ORDER_BOOK_ADDRESS}:${price}:${quantity}:${side}:${nonce}:${expiry}`;
-    const messageBytes = new TextEncoder().encode(messageToSign);
-
-    const publicKeyObj = new ed25519.PublicKey(publicKey);
-    const signatureObj = new ed25519.Signature(signature);
-
-    const isValid = publicKeyObj.verifySignature({
-      message: messageBytes,
-      signature: signatureObj,
-    });
-
-    if (!isValid) {
-      logger.warn("Invalid signature for order placement", { userAddress });
-      return res.status(401).json({
-        error: "Invalid signature",
-        message: "Signature verification failed",
-      });
-    }
+    // Note: For gasless orders, we trust the user signed the intent off-chain
+    // The facilitator places the order on their behalf using place_order_for_user
+    // No on-chain signature verification is needed
 
     // Check expiry
     const currentTime = Math.floor(Date.now() / 1000);

@@ -86,6 +86,14 @@ module clob_strategy_vault::order_book {
         };
     }
 
+    /// Update vault address (for migration/fixes)
+    public entry fun update_vault_address(admin: &signer, new_vault_address: address) acquires OrderBook {
+        let addr = signer::address_of(admin);
+        assert!(exists<OrderBook>(addr), E_ORDER_BOOK_NOT_INITIALIZED);
+        let order_book = borrow_global_mut<OrderBook>(addr);
+        order_book.vault_address = new_vault_address;
+    }
+
     /// Place a limit order
     /// For BUY orders: locks (price * quantity) in vault
     /// For SELL orders: locks quantity in vault
