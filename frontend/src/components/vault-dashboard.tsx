@@ -103,13 +103,37 @@ export function VaultDashboard() {
         description: "Please sign the authorization message (no gas required!)",
       });
 
+      // Wrap the wallet's signMessage to match the expected type
+      const signMessageAdapter = async (message: {
+        message: string;
+        nonce: string;
+      }) => {
+        const response = await signMessage({
+          message: message.message,
+          nonce: message.nonce,
+        });
+
+        // Extract signature from the response
+        let signature: string;
+        if (typeof response.signature === "string") {
+          signature = response.signature;
+        } else if (Array.isArray(response.signature)) {
+          signature = Buffer.from(response.signature as any).toString("hex");
+        } else {
+          // Handle Signature object
+          signature = String(response.signature);
+        }
+
+        return { signature };
+      };
+
       // Execute gasless payment - user only signs a message!
       const result = await executeGaslessPayment(
         backendUrl,
         account.address,
         account.publicKey?.toString() || "",
         Math.floor(parseFloat(depositAmount) * 100000000), // Convert to octas
-        signMessage,
+        signMessageAdapter,
         "/api/vault/deposit-intent",
         "/api/vault/deposit"
       );

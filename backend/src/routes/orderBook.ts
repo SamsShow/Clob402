@@ -12,7 +12,6 @@ import {
   isNonceUsed,
   markNonceUsed,
 } from "../services/nonceService";
-import { ed25519 } from "@aptos-labs/ts-sdk";
 
 export const orderBookRouter = Router();
 
